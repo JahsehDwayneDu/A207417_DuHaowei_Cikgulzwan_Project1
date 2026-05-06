@@ -3,85 +3,62 @@ package com.dwayne.a207417_duhaowei_dwtechres_lab01
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+// 使用兼容旧版 API 的时间库
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 // ==========================================
-// 1. 数据模型与主题配置
+// 1. 数据模型与主活动
 // ==========================================
 
-// Task 2: Data Class (包含至少2个字段)
-data class HealthUiState(
-    val totalWater: Int = 0,
-    val waterGoal: Int = 2000,
-    val steps: Int = 3330
+data class WaterRecord(
+    val id: Long = System.currentTimeMillis(),
+    val amount: Int,
+    // 兼容 API 24 的时间获取方式
+    val time: String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Calendar.getInstance().time)
 )
-
-// Task 3: 维持 Material Design 主题
-val PrimaryBlue = Color(0xFF005B96)
-val SecondaryBlue = Color(0xFF5B92E5)
-val BackgroundGray = Color(0xFFF8F9FA)
-
-private val AppColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
-    secondary = SecondaryBlue,
-    background = BackgroundGray,
-    surfaceVariant = Color.White
-)
-
-// ==========================================
-// 2. ViewModel 状态管理
-// ==========================================
-
-// Task 2: ViewModel Integration
-class HealthViewModel : ViewModel() {
-    private val _uiState = MutableStateFlow(HealthUiState())
-    val uiState: StateFlow<HealthUiState> = _uiState.asStateFlow()
-
-    fun addWater(amount: Int) {
-        _uiState.update { currentState ->
-            currentState.copy(totalWater = currentState.totalWater + amount)
-        }
-    }
-}
-
-// ==========================================
-// 3. 主活动与导航架构
-// ==========================================
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = AppColorScheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+            // 设置主题并调用主程序入口
+            MaterialTheme {
+                Surface(color = MaterialTheme.colorScheme.background) {
                     HealthApp()
                 }
             }
@@ -89,227 +66,252 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// 定义路由名称
-enum class HealthScreen {
-    Dashboard,
-    AddWater,
-    Summary
+// ==========================================
+// 2. ViewModel 与 状态 (Task 3: ViewModel)
+// ==========================================
+
+data class HealthUiState(
+    val userName: String = "Dwayne",
+    val matricNo: String = "A207417",
+    val waterRecords: List<WaterRecord> = emptyList(),
+    val waterGoal: Int = 2500,
+    val steps: Int = 4200,
+    val stepGoal: Int = 8000
+)
+
+class HealthViewModel : ViewModel() {
+    private val _uiState = MutableStateFlow(HealthUiState())
+    val uiState: StateFlow<HealthUiState> = _uiState.asStateFlow()
+
+    fun addWater(amount: Int) {
+        val newRecord = WaterRecord(amount = amount)
+        _uiState.update { it.copy(waterRecords = listOf(newRecord) + it.waterRecords) }
+    }
 }
 
-// Task 1 & 2: 导航控制器与页面路由分配
+// ==========================================
+// 3. 导航架构 (Task 2: 5 Screens Minimum)
+// ==========================================
+
+sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    object Dashboard : Screen("home", "Home", Icons.Default.Home)
+    object History : Screen("history", "Logs", Icons.AutoMirrored.Filled.List)
+    object Add : Screen("add", "Record", Icons.Default.AddCircle)
+    object Tips : Screen("tips", "Tips", Icons.Default.Info)
+    object Profile : Screen("profile", "Profile", Icons.Default.Person)
+}
+
 @Composable
-fun HealthApp(
-    viewModel: HealthViewModel = viewModel()
-) {
+fun HealthApp() {
     val navController = rememberNavController()
-    val uiState by viewModel.uiState.collectAsState()
+    val viewModel: HealthViewModel = viewModel()
 
-    NavHost(
-        navController = navController,
-        startDestination = HealthScreen.Dashboard.name
-    ) {
-        // 页面 1：主仪表盘
-        composable(route = HealthScreen.Dashboard.name) {
-            DashboardScreen(
-                uiState = uiState,
-                onNavigateToAddWater = { navController.navigate(HealthScreen.AddWater.name) },
-                onNavigateToSummary = { navController.navigate(HealthScreen.Summary.name) }
-            )
-        }
-
-        // 页面 2：记录饮水量表单
-        composable(route = HealthScreen.AddWater.name) {
-            AddWaterScreen(
-                onAddWater = { amount ->
-                    viewModel.addWater(amount)
-                    navController.popBackStack() // 记录完返回上一页
-                },
-                onCancel = { navController.popBackStack() } // 取消并返回
-            )
-        }
-
-        // 页面 3：数据总结视图
-        composable(route = HealthScreen.Summary.name) {
-            SummaryScreen(
-                uiState = uiState,
-                onBack = { navController.popBackStack() }
-            )
+    Scaffold(
+        bottomBar = { BottomNavigationBar(navController) }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Dashboard.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable(Screen.Dashboard.route) { DashboardScreen(viewModel) }
+            composable(Screen.History.route) { HistoryScreen(viewModel) }
+            composable(Screen.Add.route) { AddWaterScreen(viewModel, navController) }
+            composable(Screen.Tips.route) { TipsScreen() }
+            composable(Screen.Profile.route) { ProfileScreen(viewModel) }
         }
     }
 }
 
 // ==========================================
-// 4. 各个屏幕组件 (Screens)
+// 4. 各个页面实现 (UI + SDG 3 Focus)
 // ==========================================
 
 @Composable
-fun DashboardScreen(
-    uiState: HealthUiState,
-    onNavigateToAddWater: () -> Unit,
-    onNavigateToSummary: () -> Unit
-) {
+fun DashboardScreen(viewModel: HealthViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    val total = state.waterRecords.sumOf { it.amount }
+
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)
     ) {
-        // 顶部栏
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Text(
-                text = "Dwayne's Health",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(text = "Matric: A207417", color = Color.Gray, fontSize = 14.sp)
-        }
+        Text("Hello, ${state.userName}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("Advancing SDG 3: Health & Well-being", color = Color.Gray, fontSize = 14.sp)
 
-        // 饮水卡片
-        ElevatedCard(
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                ) {
-                    Icon(Icons.Default.Opacity, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Today's Water: ${uiState.totalWater} ml", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Daily Hydration", fontWeight = FontWeight.SemiBold)
+                Text("$total / ${state.waterGoal} ml", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
 
-                Button(
-                    onClick = onNavigateToAddWater,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Record Water Intake")
-                }
+                Spacer(modifier = Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { (total.toFloat() / state.waterGoal).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth().height(10.dp)
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 步数卡片
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text(text = "${uiState.steps} steps", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "Goal: 6,000", fontSize = 11.sp, color = Color.Gray)
-                    }
-                }
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(60.dp)) {
-                    CircularProgressIndicator(progress = { uiState.steps.toFloat() / 6000f }, color = MaterialTheme.colorScheme.primary)
-                    Text("55%", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        OutlinedButton(
-            onClick = onNavigateToSummary,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("View Full Summary")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatCard("Steps", "${state.steps}", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
+            StatCard("Goal", "${(state.steps*100)/state.stepGoal}%", Icons.Default.CheckCircle, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-fun AddWaterScreen(
-    onAddWater: (Int) -> Unit,
-    onCancel: () -> Unit
-) {
-    var waterInput by remember { mutableStateOf("") }
+fun HistoryScreen(viewModel: HealthViewModel) {
+    val state by viewModel.uiState.collectAsState()
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Hydration Logs", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (state.waterRecords.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No data. Start drinking water!")
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(state.waterRecords) { record ->
+                    ListItem(
+                        headlineContent = { Text("${record.amount} ml") },
+                        supportingContent = { Text("Log Time: ${record.time}") },
+                        leadingContent = { Icon(Icons.Default.LocalDrink, contentDescription = null, tint = Color(0xFF2196F3)) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddWaterScreen(viewModel: HealthViewModel, navController: NavHostController) {
+    var amount by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Text("Log Hydration", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(24.dp))
+        Icon(Icons.Default.WaterDrop, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color(0xFF2196F3))
+        Text("Log New Intake", style = MaterialTheme.typography.headlineMedium)
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         OutlinedTextField(
-            value = waterInput,
-            onValueChange = { waterInput = it },
-            label = { Text("Enter water amount (ml)") },
+            value = amount,
+            onValueChange = { amount = it },
+            label = { Text("Amount in ml") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
-                val amount = waterInput.toIntOrNull() ?: 0
-                if (amount > 0) onAddWater(amount)
+                val valInt = amount.toIntOrNull() ?: 0
+                if (valInt > 0) {
+                    viewModel.addWater(valInt)
+                    navController.popBackStack()
+                }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
-            Text("Save")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-            Text("Cancel")
+            Text("Confirm")
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SummaryScreen(
-    uiState: HealthUiState,
-    onBack: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Health Summary") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+fun TipsScreen() {
+    val tips = listOf(
+        "Tip: Drink 500ml water right after waking up.",
+        "SDG 3 Fact: Clean water prevents many diseases.",
+        "Tip: Use a reusable bottle to protect the planet.",
+        "Tip: Don't wait until you're thirsty to drink."
+    )
+
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        item { Text("Health Insights", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
+        item { Spacer(modifier = Modifier.height(16.dp)) }
+        items(tips) { tip ->
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text(tip, modifier = Modifier.padding(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileScreen(viewModel: HealthViewModel) {
+    val state by viewModel.uiState.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier.size(80.dp).background(Color.LightGray, RoundedCornerShape(40.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(50.dp))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(state.userName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Matric No: ${state.matricNo}", color = Color.Gray)
+
+        Spacer(modifier = Modifier.height(32.dp))
+        HorizontalDivider()
+        ListItem(headlineContent = { Text("App Project") }, trailingContent = { Text("Project 1") })
+        ListItem(headlineContent = { Text("SDG Goal") }, trailingContent = { Text("Goal 3") })
+    }
+}
+
+// ==========================================
+// 5. 辅助 UI 组件
+// ==========================================
+
+@Composable
+fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, shape = RoundedCornerShape(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(label, fontSize = 12.sp, color = Color.Gray)
+            Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun BottomNavigationBar(navController: NavHostController) {
+    val items = listOf(Screen.Dashboard, Screen.History, Screen.Add, Screen.Tips, Screen.Profile)
+    NavigationBar {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route
+
+        items.forEach { screen ->
+            NavigationBarItem(
+                icon = { Icon(screen.icon, contentDescription = null) },
+                label = { Text(screen.title) },
+                selected = currentRoute == screen.route,
+                onClick = {
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.startDestinationId)
+                        launchSingleTop = true
                     }
                 }
             )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .padding(24.dp)
-                .fillMaxSize()
-        ) {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Hydration Status", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text("Total Intake: ${uiState.totalWater} ml")
-                    Text("Daily Goal: ${uiState.waterGoal} ml")
-                    val remaining = maxOf(0, uiState.waterGoal - uiState.totalWater)
-                    Text("Remaining: $remaining ml", color = if (remaining == 0) Color.Green else Color.Red)
-                }
-            }
         }
     }
 }
